@@ -6,6 +6,7 @@ print("Version 1.0 by enzomtp")
 bot = commands.Bot(command_prefix=commands.when_mentioned, self_bot=True)
 dotenv.load_dotenv()
 tracked_users = os.getenv("TRACKED_USERS").split(", ")
+notification_user = os.getenv("NOTIFICATION_USER")
 print(f"Tracking {len(tracked_users)} users")
 
 # Database setup
@@ -51,6 +52,14 @@ async def on_presence_update(before, after):
     if after.status == discord.Status.offline:
         c.execute("INSERT OR REPLACE INTO User (userid, last_seen) VALUES (?, ?)", (after.id, datetime.datetime.now()))
         conn.commit()
+        if str(after.id) in tracked_users:
+            user = await bot.fetch_user(notification_user)
+            await user.send(f"{after.name} is now offline.")
+    elif after.status != discord.Status.offline:
+        if str(after.id) in tracked_users:
+            user = await bot.fetch_user(notification_user)
+            await user.send(f"{after.name} is now online.")
+            
 
 bot.run(os.getenv("DISCORD_TOKEN"))
 conn.close()
