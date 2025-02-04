@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  discordlastseen:
+    build: .
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - TRACKED_USERS=${TRACKED_USERS}
+      - NOTIFICATION_USER=${NOTIFICATION_USER}
+    volumes:
+      - .:/app

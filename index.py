@@ -1,18 +1,22 @@
 from discord.ext import commands
-import datetime, dotenv, datetime, sqlite3, discord, os
+import datetime
+import dotenv
+import sqlite3
+import discord
+import os
 
-print("Version 1.0 by enzomtp")
+print("Version 1.1 by enzomtp")
 
 bot = commands.Bot(command_prefix=commands.when_mentioned, self_bot=True)
 dotenv.load_dotenv()
 tracked_users = os.getenv("TRACKED_USERS").split(", ")
-notification_user = os.getenv("NOTIFICATION_USER")
+notification_user = int(os.getenv("NOTIFICATION_USER"))
 print(f"Tracking {len(tracked_users)} users")
 
 # Database setup
 conn = sqlite3.connect('last_seen.db')
 c = conn.cursor()
-c.execute('''CREATE TABLE IF NOT EXISTS User (userid TEXT PRIMARY KEY,last_seen TEXT)''')
+c.execute('''CREATE TABLE IF NOT EXISTS User (userid TEXT PRIMARY KEY, last_seen TEXT)''')
 conn.commit()
 
 @bot.command(aliases=["ls"])
@@ -44,22 +48,39 @@ async def lastseen(ctx, user: discord.User = None):
 async def on_ready():
     print(f'Connected to discord with: {bot.user.name}')
 
+# Dictionary to store the last known status of each user
+last_status = {}
+
 @bot.event
 async def on_presence_update(before, after):
-    print(f"Presence update for {after}")
     if after.id == bot.user.id:
         return
+    if before.status == after.status:
+        return  # Status hasn't changed, so we ignore this event
+    if after.id in last_status and last_status[after.id] == after.status:
+        return  # Status hasn't changed since the last update, so we ignore this event
+    last_status[after.id] = after.status  # Update the last known status
+
     if after.status == discord.Status.offline:
         c.execute("INSERT OR REPLACE INTO User (userid, last_seen) VALUES (?, ?)", (after.id, datetime.datetime.now()))
         conn.commit()
         if str(after.id) in tracked_users:
-            user = await bot.fetch_user(notification_user)
-            await user.send(f"{after.name} is now offline.")
+            try:
+                user_profile = await bot.fetch_user_profile(notification_user, with_mutual_guilds=True)
+                await user_profile.send(f"<@{after.id}> is now offline.")
+            except discord.errors.NotFound:
+                print(f"User with ID {notification_user} not found.")
+            except discord.errors.HTTPException as e:
+                print(f"HTTP exception occurred: {e}")
     elif after.status != discord.Status.offline:
         if str(after.id) in tracked_users:
-            user = await bot.fetch_user(notification_user)
-            await user.send(f"{after.name} is now online.")
-            
+            try:
+                user_profile = await bot.fetch_user_profile(notification_user, with_mutual_guilds=True)
+                await user_profile.send(f"<@{after.id}> is now online.")
+            except discord.errors.NotFound:
+                print(f"User with ID {notification_user} not found.")
+            except discord.errors.HTTPException as e:
+                print(f"HTTP exception occurred: {e}")
 
 bot.run(os.getenv("DISCORD_TOKEN"))
 conn.close()
